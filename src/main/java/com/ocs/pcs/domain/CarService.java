@@ -25,5 +25,7 @@ public interface CarService {
 
     void add(String name, String brand, String type, Integer hbp, Handler<AsyncResult<Car>> resultHandler);
 
+    void delete(String id, Handler<AsyncResult<Void>> resultHandler);
+
     void findAll(Handler<AsyncResult<List<Car>>> resultHandler);
 }

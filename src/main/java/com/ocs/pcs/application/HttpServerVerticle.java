@@ -1,5 +1,6 @@
 package com.ocs.pcs.application;
 
+import com.ocs.pcs.reactivex.domain.CarService;
 import io.reactivex.Completable;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -12,15 +13,11 @@ import io.vertx.reactivex.ext.web.Router;
 import io.vertx.reactivex.ext.web.RoutingContext;
 import io.vertx.reactivex.ext.web.handler.BodyHandler;
 import io.vertx.reactivex.ext.web.templ.FreeMarkerTemplateEngine;
-
-import java.nio.charset.StandardCharsets;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.ocs.pcs.reactivex.domain.CarService;
+import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 public class HttpServerVerticle extends AbstractVerticle {
 
@@ -57,7 +54,7 @@ public class HttpServerVerticle extends AbstractVerticle {
         subRouter.route(HttpMethod.GET, "/find").handler(this::findHandler);
         subRouter.route(HttpMethod.POST, "/create").handler(this::createHandler);
         subRouter.route(HttpMethod.PUT, "/update").handler(this::updateHandler);
-        subRouter.route(HttpMethod.DELETE, "/delete/:id").handler(this::deleteHandler);
+        subRouter.route(HttpMethod.POST, "/delete").handler(this::deleteHandler);
         router.mountSubRouter("/api", subRouter);
 
         this.vertx.createHttpServer()
@@ -77,7 +74,8 @@ public class HttpServerVerticle extends AbstractVerticle {
                 .rxFindAll()
                 .flatMapCompletable(cars -> {
                     routingContext.put("title", "Patrick's car service!");
-                    routingContext.put("cars", cars.stream().map(car -> car.getName()).collect(Collectors.toList()));
+                    routingContext.put("cars", cars);
+//                    routingContext.put("cars", cars.stream().map(car -> car.getName()).collect(Collectors.toList()));
                     return Completable.complete();
                 })
                 .andThen(templateEngine.rxRender(routingContext, "templates", "/index.ftl"))
@@ -86,18 +84,15 @@ public class HttpServerVerticle extends AbstractVerticle {
                     routingContext.response().end(result);
                 }, throwable -> routingContext.fail(throwable));
 
-
-        //        carService
-//                .rxFindAll()
-//                .subscribe(cars -> {
-//            routingContext.put("title", "Patrick's car service!");
-//            List<String> result = cars.stream().map(car -> car.getName()).collect(Collectors.toList());
-//            routingContext.put("cars", cars);
-//            templateEngine.rxRender(routingContext, "templates", "/index.ftl").subscribe()
-//        });
     }
 
     private void deleteHandler(RoutingContext routingContext) {
+        String id = routingContext.request().getParam("id");
+        carService.rxDelete(id).subscribe(() -> {
+            routingContext.response().setStatusCode(303);
+            routingContext.response().putHeader("Location", "/");
+            routingContext.response().end();
+        }, throwable -> routingContext.fail(throwable));
     }
 
     private void updateHandler(RoutingContext routingContext) {
@@ -124,29 +119,18 @@ public class HttpServerVerticle extends AbstractVerticle {
     }
 
     private void createHandler(RoutingContext routingContext) {
-        JsonObject jsonObject = routingContext.getBodyAsJson();
-        String name = jsonObject.getString("name");
-        String brand = jsonObject.getString("brand");
-        String type = jsonObject.getString("type");
-        Integer hbp = jsonObject.getInteger("hbp");
+        String name = routingContext.request().getParam("name");
+        String brand = routingContext.request().getParam("brand");
+        String type = routingContext.request().getParam("type");
+        Integer hbp = Integer.parseInt(routingContext.request().getParam("bhp"));
 
         carService
                 .rxAdd(name, brand, type, hbp)
                 .subscribe(car -> {
-                    JsonObject response = car.toJson();
-                    routingContext
-                            .response()
-                            .putHeader("content-type", "application/json; charset=UTF-8")
-                            .end(response.encode(), StandardCharsets.UTF_8.name());
+                    routingContext.response().setStatusCode(303);
+                    routingContext.response().putHeader("Location", "/");
+                    routingContext.response().end();
+                }, throwable -> routingContext.fail(throwable));
 
-                }, throwable -> {
-                    LOGGER.error("Failure while trying to find cars.", throwable);
-                    routingContext
-                            .response()
-                            .putHeader("Content-Type", "application/json; charset=UTF-8")
-                            .end(new JsonObject()
-                                    .put("Error", throwable.getMessage())
-                                    .encode(), StandardCharsets.UTF_8.name());
-                });
     }
 }
